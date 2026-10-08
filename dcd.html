@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data Center Dystopia</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#cfe3b8;--paper:#f3f6ec;--ink:#17261c;--mute:#5c6b5f;--blue:#2447e6;--line:#c3d1b4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#1c2a21;--ink:#e8f0e2;--mute:#9db0a2;--line:#33473a;--blue:#7d95ff}}
+:root[data-theme="dark"]{--paper:#1c2a21;--ink:#e8f0e2;--mute:#9db0a2;--line:#33473a;--blue:#7d95ff}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Figtree,system-ui,sans-serif;transition:background 1s}
+h1{font:900 clamp(28px,5vw,46px)/1 Fraunces,Georgia,serif;margin:0;letter-spacing:-.02em}
+header{padding:18px 20px 6px;max-width:1100px;margin:auto}
+header p{margin:6px 0 0;color:var(--ink);opacity:.75;max-width:60ch}
+main{display:flex;gap:16px;max-width:1100px;margin:auto;padding:12px 20px 28px;flex-wrap:wrap;align-items:flex-start}
+.map{flex:1 1 520px;min-width:0}
+canvas{width:100%;height:auto;border-radius:10px;display:block;cursor:pointer;box-shadow:0 0 0 3px var(--paper)}
+aside{flex:1 1 300px;max-width:100%;background:var(--paper);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stats div{border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+.stats b{font:700 20px Fraunces,serif;display:block}
+.stats span{font-size:13px;color:var(--mute)}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:#3f9a4d;transition:width .4s,background .4s}
+h2{font:700 17px Fraunces,serif;margin:0 0 6px}
+button{font:600 14px Figtree,sans-serif;color:var(--ink);background:transparent;border:1.5px solid var(--ink);border-radius:6px;padding:8px 10px;cursor:pointer;text-align:left;width:100%;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px}
+button:hover:not(:disabled){background:var(--blue);border-color:var(--blue);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+button.pitch{background:var(--blue);color:#fff;border-color:var(--blue);justify-content:center}
+#log{font-size:14px;color:var(--mute);max-height:150px;overflow:auto;margin:0;padding-left:18px}
+#log li{margin-bottom:3px}#log li:first-child{color:var(--ink)}
+#end{position:fixed;inset:0;background:rgba(20,22,24,.88);color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;z-index:9}
+#end div{max-width:46ch}#end h1{margin-bottom:12px}#end button{justify-content:center;background:#fff;color:#111;margin-top:16px}
+</style>
+</head>
+<body>
+<header>
+<h1>Data Center Dystopia</h1>
+<p>A lovely valley. Excellent forests, lakes and wildflowers. Sadly, none of them run inference. Fix that.</p>
+</header>
+<main>
+<div class="map"><canvas id="c" width="672" height="504" aria-label="Valley map"></canvas></div>
+<aside>
+<div class="stats">
+<div><b id="cash">$0</b><span>Cash</span></div>
+<div><b id="inc">$0/s</b><span>Income</span></div>
+<div><b id="dcs">0</b><span>Server floors</span></div>
+<div><b id="bun">0</b><span>Animals "relocated"</span></div>
+</div>
+<div><span style="font-size:13px;color:var(--mute)">Nature remaining: <b id="npct">100%</b></span><div class="bar"><i id="nbar" style="width:100%"></i></div></div>
+<button class="pitch" id="pitch">Pitch investors on "AI for X" (+$<span id="ppc">8</span>)</button>
+<div id="act"></div>
+<div id="up"></div>
+<div><h2>Press releases</h2><ul id="log"></ul></div>
+</aside>
+</main>
+<div id="end"><div><h1>Valley optimized.</h1><p id="endtxt"></p><button id="again">Disrupt another valley</button></div></div>
+<script>
+const W=12,H=9,T=56,cv=document.getElementById('c'),g=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const COL={forest:'#2f6b3a',meadow:'#93c864',lake:'#4aa3d8',mountain:'#8b9099',cleared:'#a98a62',dc:'#a98a62'};
+const M={
+meadow:[{n:'Rezone as "Underutilized Grass"',c:10,m:['The meadow was found guilty of being merely pretty.','Grass declared a "legacy green-field asset".']},
+{n:'Pave for a "Pollinator Parking Lot"',c:30,r:20,m:['The bees now park here. They hate it. Parking revenue: $20.','Pollinator Parking Lot opens. Zero pollinators, 40 chargers.']}],
+forest:[{n:'Commission a "Tree Sustainability Study"',c:25,m:['The study found trees "pre-deforested by trend lines".','Consultants measured the forest in units of lumber. Forest unamused.']},
+{n:'Unexplained wildfire (allegedly)',c:60,r:95,m:['Wildfire started by a "vintage space heater". Insurance pays out $95.','Smoke visible from orbit. Our thoughts and prayers are fully monetized.']}],
+lake:[{n:'Rebrand lake as "Cooling Asset"',c:40,m:['Lake pivots to "Liquid Cooling-as-a-Service". Ducks given severance.','The lake was told it has been "a chiller all along".']},
+{n:'Siphon it quietly at night',c:15,m:['Lake is now a puddle with a mission statement.','Water usage reported as "approximately water".']}],
+mountain:[{n:'Disrupt it with synergy',c:80,m:['The mountain failed to scale and was moved to "growth equity".','Leveraged the peak. Now it is a plateau of opportunity.']},
+{n:'Hire 400 consultants to "flatten the org chart"',c:120,r:60,m:['Org chart flattened. So was the mountain. Consulting fee refunded in vibes ($60).','The summit was deemed a "single point of failure".']}]
+};
+const NAT=['forest','meadow','lake','mountain'];
+let S,tiles;
+function rnd(s){s=Math.sin(s*127.1+311.7)*43758.5453;return s-Math.floor(s)}
+function init(){
+ tiles=[];
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  const r=rnd(x*13+y*7.7+1),i=y*W+x;let t='meadow';
+  if(y<2&&r<.65)t='mountain';
+  else if(Math.hypot(x-8,y-5)<2.1||Math.hypot(x-2,y-6.5)<1.4)t='lake';
+  else if(r<.5)t='forest';
+  tiles.push({t,o:t,lvl:0,s:i+1});
+ }
+ S={cash:60,lob:0,hype:0,rabbits:0,sel:null,log:['Welcome to the valley. Investors are "cautiously ecstatic".'],clicks:0,over:false};
+ $('end').style.display='none';ui();
+}
+const inc=()=>tiles.reduce((a,t)=>a+t.lvl*3*(t.o==='lake'?2:1),0)*Math.pow(1.5,S.hype);
+const nat=()=>tiles.filter(t=>NAT.includes(t.t)).length;
+const dcCost=l=>[100,250,600][l];
+const lobCost=()=>Math.round(150*Math.pow(1.6,S.lob));
+const hypeCost=()=>Math.round(400*Math.pow(2.2,S.hype));
+const ppc=()=>8+S.lob*3+Math.floor(S.cash/200);
+function log(m){S.log.unshift(m);S.log=S.log.slice(0,12)}
+function ui(){
+ const n=nat(),p=Math.round(n/tiles.length*100);
+ $('cash').textContent='$'+Math.floor(S.cash);$('inc').textContent='$'+inc().toFixed(1)+'/s';
+ $('dcs').textContent=tiles.reduce((a,t)=>a+t.lvl,0);$('bun').textContent=S.rabbits;
+ $('npct').textContent=p+'%';$('nbar').style.width=p+'%';$('nbar').style.background=p>50?'#3f9a4d':p>20?'#b79a2e':'#8a4a3a';
+ $('ppc').textContent=ppc();
+ document.body.style.background=`rgb(${Math.round(207-(1-p/100)*70)},${Math.round(227-(1-p/100)*95)},${Math.round(184-(1-p/100)*50)})`;
+ let a='';const t=S.sel!=null?tiles[S.sel]:null;
+ if(!t)a='<h2>Pick a tile</h2><p style="margin:0;color:var(--mute);font-size:14px">Click any part of the valley to start monetizing it.</p>';
+ else if(NAT.includes(t.t)){a=`<h2>Clear this ${t.t}</h2>`+M[t.t].map((m,i)=>`<button data-clr="${i}" ${S.cash<m.c?'disabled':''}><span>${m.n}</span><span>$${m.c}</span></button>`).join('')}
+ else if(t.lvl<3){a=`<h2>${t.lvl?'Add floor '+(t.lvl+1):'Build a data center'}</h2><button data-b="1" ${S.cash<dcCost(t.lvl)?'disabled':''}><span>${t.lvl?'Stack another server floor':'Pour concrete, call it "campus"'}${t.o==='lake'?' (free water!)':''}</span><span>$${dcCost(t.lvl)}</span></button>`}
+ else a='<h2>Maxed out</h2><p style="margin:0;color:var(--mute);font-size:14px">This tile hums with purpose and consumes a small town\'s power.</p>';
+ $('act').innerHTML=a;
+ $('up').innerHTML=`<h2>Upgrades</h2><button data-u="lob" ${S.cash<lobCost()?'disabled':''}><span>Hire a lobbyist (clears land over lunch) ×${S.lob}</span><span>$${lobCost()}</span></button><button data-u="hype" ${S.cash<hypeCost()?'disabled':''}><span>Hype machine: income ×1.5 (lvl ${S.hype})</span><span>$${hypeCost()}</span></button>`;
+ $('log').innerHTML=S.log.map(l=>`<li>${l}</li>`).join('');
+}
+function clear(i,mi){const t=tiles[i],m=M[t.t][mi];if(S.cash<m.c)return;
+ S.cash+=(m.r||0)-m.c;S.rabbits+=Math.floor(3+Math.random()*12*(t.t==='forest'?2:1));
+ log(m.m[Math.floor(Math.random()*m.m.length)]);t.t='cleared';check();ui()}
+function check(){if(!S.over&&nat()===0){S.over=true;
+ $('endtxt').textContent=`Every last tree, pond and peak is now compute. ${S.rabbits} animals were relocated to "a better place". Nature is still available as an AI-generated image for $20/month.`;
+ setTimeout(()=>$('end').style.display='flex',700)}}
+cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*W),y=Math.floor((e.clientY-r.top)/r.height*H);S.sel=y*W+x;ui()});
+$('act').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||S.sel==null)return;
+ if(b.dataset.clr!=null)clear(S.sel,+b.dataset.clr);
+ else if(b.dataset.b){const t=tiles[S.sel],c=dcCost(t.lvl);if(S.cash<c)return;S.cash-=c;t.lvl++;
+  if(t.lvl===1){t.t='dc';log(['Data center online. It will create 11 jobs, mostly security guards.','Ribbon cut. Local power grid files a complaint.','New campus announced with a "community benefit" plaque.'][Math.floor(Math.random()*3)])}
+  ui()}});
+$('up').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.u==='lob'&&S.cash>=lobCost()){S.cash-=lobCost();S.lob++;log('New lobbyist hired. Zoning laws got a lot more flexible.')}
+ if(b.dataset.u==='hype'&&S.cash>=hypeCost()){S.cash-=hypeCost();S.hype++;log('Keynote held. Stock rises on the word "agentic".')}
+ ui()});
+$('pitch').onclick=()=>{S.cash+=ppc();S.clicks++;if(S.clicks%10===0)log(['VC calls it "the Uber of Uber".','You said "AI" 14 times. Valuation +2 yachts.','A founder pivots to "AI for tamagotchis".'][Math.floor(Math.random()*3)]);ui()};
+$('again').onclick=init;
+setInterval(()=>{if(S.over)return;S.cash+=inc();
+ if(S.lob&&Math.random()<Math.min(.9,S.lob*.12)){const l=tiles.map((t,i)=>NAT.includes(t.t)?i:-1).filter(i=>i>=0);
+  if(l.length){const i=l[Math.floor(Math.random()*l.length)],t=tiles[i];log(`A lobbyist got the ${t.t} reclassified over a steak dinner.`);t.t='cleared';S.rabbits+=4;check()}}
+ ui()},1000);
+function tile(t,x,y,time){
+ g.fillStyle=COL[t.t];g.fillRect(x,y,T,T);const s=t.s,R=k=>rnd(s*3.3+k);
+ if(t.t==='forest'){for(let k=0;k<3;k++){const px=x+8+R(k)*40,py=y+14+R(k+9)*34;g.fillStyle='#1c4a28';g.beginPath();g.moveTo(px,py-14);g.lineTo(px-9,py+4);g.lineTo(px+9,py+4);g.fill();g.fillStyle='#5b3a1f';g.fillRect(px-1.5,py+4,3,5)}}
+ else if(t.t==='meadow'){for(let k=0;k<7;k++){g.fillStyle=['#fff','#ffd84a','#ff8fb0','#b99bff'][k%4];g.beginPath();g.arc(x+5+R(k)*46,y+5+R(k+5)*46,2.2,0,7);g.fill()}}
+ else if(t.t==='lake'){g.strokeStyle='rgba(255,255,255,.6)';g.lineWidth=1.5;for(let k=0;k<2;k++){g.beginPath();g.arc(x+28,y+20+k*18,10+Math.sin(time/700+k)*3,3.4,6);g.stroke()}}
+ else if(t.t==='mountain'){g.fillStyle='#5f646d';g.beginPath();g.moveTo(x+28,y+8);g.lineTo(x+6,y+50);g.lineTo(x+50,y+50);g.fill();g.fillStyle='#fff';g.beginPath();g.moveTo(x+28,y+8);g.lineTo(x+20,y+24);g.lineTo(x+36,y+24);g.fill()}
+ else if(t.t==='cleared'){g.fillStyle='#8c6f4c';for(let k=0;k<6;k++)g.fillRect(x+R(k)*50,y+R(k+3)*50,4,3);g.fillStyle='#e6a83a';g.fillRect(x+10,y+36,14,8);g.fillStyle='#222';g.fillRect(x+12,y+43,4,4);g.fillRect(x+20,y+43,4,4)}
+ else if(t.t==='dc'){for(let l=0;l<t.lvl;l++){const by=y+42-l*13;g.fillStyle='#3a3f48';g.fillRect(x+5,by-10,46,14);g.fillStyle='#222831';g.fillRect(x+5,by+2,46,2);
+  for(let k=0;k<5;k++){const on=Math.sin(time/200+k*2+l*3+s)>0;g.fillStyle=on?'#4dff88':'#e24b4b';g.fillRect(x+9+k*8,by-6,3,3)}}
+  g.fillStyle='#8da';g.beginPath();g.arc(x+46,y+8,5,time/150,time/150+4.2);g.stroke()}
+}
+function draw(time){
+ const sm=1-nat()/tiles.length;
+ for(let i=0;i<tiles.length;i++)tile(tiles[i],(i%W)*T,Math.floor(i/W)*T,time);
+ g.strokeStyle='rgba(0,0,0,.08)';g.lineWidth=1;for(let i=0;i<=W;i++){g.beginPath();g.moveTo(i*T,0);g.lineTo(i*T,H*T);g.stroke()}for(let i=0;i<=H;i++){g.beginPath();g.moveTo(0,i*T);g.lineTo(W*T,i*T);g.stroke()}
+ g.fillStyle=`rgba(110,95,70,${sm*.42})`;g.fillRect(0,0,W*T,H*T);
+ if(S.sel!=null){g.strokeStyle='#fff';g.lineWidth=3;g.strokeRect((S.sel%W)*T+1.5,Math.floor(S.sel/W)*T+1.5,T-3,T-3)}
+ requestAnimationFrame(draw);
+}
+init();requestAnimationFrame(draw);
+</script>
+</body>
+</html>
